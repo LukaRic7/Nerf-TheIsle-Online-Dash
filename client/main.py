@@ -88,6 +88,8 @@ def send_client_update():
 def clipboard_checker():
     last_clip = ''
     while True:
+        time.sleep(0.5)
+
         try:
             clip = pyperclip.paste().strip()
         except Exception:
@@ -106,13 +108,13 @@ def clipboard_checker():
                 
                 parsed_coords.append(float(clean_part))
 
+            if len(parsed_coords) != 2: continue
+
             lr.Log.debug(f'New coordinates: {parsed_coords}')
 
             if router.is_connected():
                 router.send_coords(parsed_coords)
         except ValueError: pass
-
-        time.sleep(0.5)
 
 def startup():
     validate_cookie()
