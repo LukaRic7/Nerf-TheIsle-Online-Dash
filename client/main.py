@@ -1,4 +1,4 @@
-import json, threading, time, sys, asyncio
+import json, threading, time, sys, asyncio, re
 from datetime import datetime, timezone
 from pathlib import Path
 import tkinter as tk
@@ -40,7 +40,7 @@ from gui import Gui
 #  CONSTANTS & GLOBALS
 # ============================================= #
 
-VERSION = '6.0.0'
+VERSION = '1.1'
 
 router = Router()
 nerfAPI = NerfAPI(config.get('nerf-cookie'))
@@ -85,6 +85,35 @@ def send_client_update():
 
     router.send_client_information(profile | active | { 'playtime': playtime })
 
+def clipboard_checker():
+    last_clip = ''
+    while True:
+        try:
+            clip = pyperclip.paste().strip()
+        except Exception:
+            clip = ''
+        
+        if clip == last_clip: continue
+        last_clip = clip
+
+        try:
+            parts = re.split(r',\s+', clip.strip())
+            
+            parsed_coords = []
+            for part in parts[:2]:
+                clean_part = part.replace('.', '')
+                clean_part = clean_part.replace(',', '.')
+                
+                parsed_coords.append(float(clean_part))
+
+            lr.Log.debug(f'New coordinates: {parsed_coords}')
+
+            if router.is_connected():
+                router.send_coords(parsed_coords)
+        except ValueError: pass
+
+        time.sleep(0.5)
+
 def startup():
     validate_cookie()
     connect()
@@ -92,6 +121,7 @@ def startup():
     if router.is_connected():
         gui.my_client_id = router.client_id
         router.client_list_updated_external_callback = gui.display_clients_information
+        router.update_client_map_external_callback = gui.update_map
         gui.send_tp_request_callback = nerfAPI.send_teleport
         gui.accept_tp_request_callback = nerfAPI.accept_teleports
 
@@ -119,6 +149,7 @@ def main():
     gui.pack(fill='both', expand=True)
 
     threading.Thread(target=startup, daemon=True).start()
+    threading.Thread(target=clipboard_checker, daemon=True).start()
 
     gui.mainloop()
 

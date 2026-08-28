@@ -1,4 +1,5 @@
 import socketio, socketio.exceptions, sys
+from collections import deque
 from pathlib import Path
 from aiohttp import web
 import loggerric as lr
@@ -26,9 +27,11 @@ class Router:
         self.__sio.on('connect', self.__on_client_connect)
         self.__sio.on('disconnect', self.__on_client_disconnect)
         self.__sio.on('client-information', self.__on_client_information)
+        self.__sio.on('new-client-coords', self.__on_new_client_coords)
 
         self.__connected_clients = set()
         self.__client_data = {}
+        self.__client_coords:dict[str, deque] = {}
 
     def bind_event(self, event:str, callback):
         self.__sio.on(event, callback)
@@ -42,6 +45,13 @@ class Router:
 
     def get_clients(self) -> dict:
         return self.__client_data
+
+    async def __on_new_client_coords(self, client_id:str, coords:list[float, float]):
+        self.__client_coords[client_id].append(coords)
+
+        serialized = { k: list(v) for k, v in self.__client_coords.items() }
+
+        await self.__sio.emit('update-client-map', serialized)
 
     async def __on_client_connect(self, client_id:str, env:dict, auth:dict):
         # Log the incoming attempt
@@ -65,6 +75,7 @@ class Router:
         await self.__sio.emit('auth-success', client_id, to=client_id)
 
         self.__client_data[client_id] = { 'color': ColorManager.occupy() }
+        self.__client_coords[client_id] = deque(maxlen=5)
 
         await self.__sio.emit('client-list-updated', self.__client_data)
         await self.__sio.emit('clients-data', self.__client_data)
@@ -76,6 +87,8 @@ class Router:
         ColorManager.unassign(self.__client_data[client_id]['color'])
         if client_id in self.__client_data:
             del self.__client_data[client_id]
+        if client_id in self.__client_coords:
+            del self.__client_coords[client_id]
         
         lr.Log.info(f'Client {client_id} was disconnected!', highlight=client_id)
 

@@ -51,3 +51,40 @@ def letterbox_and_grid(image:Image.Image, width:int, height:int, grid_size:int=8
     canvas.paste(resized, (paste_x, paste_y), resized)
 
     return canvas
+
+def coordinates(image:Image.Image, data:dict[str, dict], bounds:dict) -> Image.Image:
+    overlay = Image.new('RGBA', image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+
+    for client_id, client_data in data.items():
+        coords = []
+        for coord in client_data.get('coords', []):
+            y, x = coord
+            w, h = image.size
+
+            px = (x - bounds['min-x']) / (bounds['max-x'] - bounds['min-x']) * w
+            py = h - (y - bounds['min-y']) / (bounds['max-y'] - bounds['min-y']) * h
+
+            coords.append((px, py))
+
+        color = client_data.get('color', '#000000')
+        if len(coords) > 1:
+            for i in range(len(coords) - 1):
+                draw.line((coords[i], coords[i + 1]), fill=color, width=2)
+
+        for i, (x, y) in enumerate(coords):
+            if i == len(coords) - 1:
+                icon = client_data.get('icon')
+
+                if icon is not None:
+                    icon_x = int(x - icon.width / 2)
+                    icon_y = max(0, int(y - icon.height / 2) - 20)
+
+                    overlay.alpha_composite(icon, (icon_x, icon_y))
+            
+            r = 3
+            draw.ellipse((x - r, y - r, x + r, y + r), fill=color,
+                            outline='#ffffff', width=1)
+
+
+    return Image.alpha_composite(image, overlay)

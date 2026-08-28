@@ -1,31 +1,6 @@
 import loggerric as lr
 import random
 
-def darken_hex_color(hex_color:str, percent:float) -> str:
-    """
-    Darkens a hex color by a given percentage.
-
-    *Parameters*:
-    - `hex_color` (str): Hexadecimal color string, e.g., "#FFAA00".
-    - `percent` (float): Fraction to darken the color by (default 0.3 = 30%).
-
-    *Returns*:
-    - (str): The darkened hex color.
-    """
-    hex_color = hex_color.lstrip('#')
-
-    # Convert hex to RGB components
-    r = int(hex_color[0:2], 16)
-    g = int(hex_color[2:4], 16)
-    b = int(hex_color[4:6], 16)
-
-    # Apply darkening factor and clamp to [0, 255]
-    r = max(0, min(255, int(r * (1 - percent))))
-    g = max(0, min(255, int(g * (1 - percent))))
-    b = max(0, min(255, int(b * (1 - percent))))
-
-    return f'#{r:02X}{g:02X}{b:02X}'
-
 class ColorManager:
     """
     **Manages a fixed pool of colors, allowing them to be assigned and

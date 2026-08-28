@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  isle-server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    environment:
+      - PORT=56556
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "56556:56556"
+    restart: unless-stopped

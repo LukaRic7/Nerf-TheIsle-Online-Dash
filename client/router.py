@@ -20,11 +20,16 @@ class Router:
         self.__sio.on('auth-success', self.__on_auth_success)
         self.__sio.on('client-list-updated', self.__on_client_list_updated)
         self.__sio.on('clients-data', self.__on_clients_data)
+        self.__sio.on('update-client-map', self.__on_update_client_map)
 
         self.client_list_updated_external_callback = None
+        self.update_client_map_external_callback = None
 
         self.client_id = ''
         self.__clients_data = {}
+
+    def send_coords(self, coords:list[float, float]):
+        self.__sio.emit('new-client-coords', coords)
 
     def is_connected(self) -> bool:
         return self.__sio.connected
@@ -43,9 +48,14 @@ class Router:
     def connect(self, ip:str, port:int, password:str):
         try:
             # This will raise an exception if the server rejects the connection
-            self.__sio.connect(f'http://{ip}:{port}', auth={ 'password': password })
+            self.__sio.connect(f'http://{ip}:{port}', auth={ 'password': password },
+                               wait_timeout=60)
         except socketio.exceptions.ConnectionError as e:
             lr.Log.error(f'Error connecting to server: {e}', align_key=43)
+
+    def __on_update_client_map(self, coords:dict[str, list]):
+        if self.update_client_map_external_callback:
+            self.update_client_map_external_callback(coords)
 
     def __on_clients_data(self, data:dict):
         self.__clients_data = data

@@ -41,7 +41,25 @@ class Gui(ttk.Frame):
         self.__meat = tk.PhotoImage(file='assets/health.png').subsample(2)
         self.__playtime = tk.PhotoImage(file='assets/health.png').subsample(2)
 
+        self.__map_icons:dict[str, Image.Image] = {}
+        species = ['Tyrannosaurus', 'Allosaurus', 'Deinosuchus', 'Ceratosaurus',
+                   'Carnotaurus', 'Dilophosaurus', 'Omniraptor', 'Austroraptor',
+                   'Herrerasaurus', 'Troodon', 'Pteranodon', 'Stegosaurus',
+                   'Triceratops', 'Diabloceratops', 'Maiasaura', 'Tenotosaurus',
+                   'Pachycephalosaurus', 'Dryosaurus', 'Hypsilophodon', 'Kentrosaurus',
+                   'Beipiaosaurus', 'Gallimimus']
+        for specie in species:
+            try:
+                file = f'assets/{specie}.png'
+                self.__map_icons[specie] = Image.open(file).convert('RGBA').resize(
+                    (64, 64), Image.Resampling.LANCZOS)
+            except:
+                file = 'assets/fraigl_star.png'
+                self.__map_icons[specie] = Image.open(file).convert('RGBA').resize(
+                    (64, 64), Image.Resampling.LANCZOS)
+
         self.__client_frames:dict[str, dict[str, tk.Widget]] = {}
+        self.__local_coords_copy:dict[str, list] = {}
 
         self.send_tp_request_callback = None
         self.accept_tp_request_callback = None
@@ -95,6 +113,10 @@ class Gui(ttk.Frame):
         for client_id, data in pending_client_ids.items():
             if self.__client_frames[client_id]:
                 self.__client_frames[client_id]['accept_btn'].configure(state='active')
+
+    def update_map(self, coords:dict[str, list]):
+        self.__local_coords_copy = coords
+        self.render_map()
 
     def __tp_btn_send(self, btn_owner_client_id:str):
         lr.Log.debug(f'Sending teleport request to: {btn_owner_client_id}',
@@ -276,6 +298,20 @@ class Gui(ttk.Frame):
         height = self.__canvas_frame.winfo_height()
 
         map = renderer.letterbox_and_grid(self.__base_map_image, width, height)
+
+        map_config:dict = self.__config.get('map', {})
+        bounds = map_config.get('bounds', {})
+
+        if self.__local_copy_clients_data:
+            data = {}
+            for client_id, client_data in self.__local_copy_clients_data.items():
+                data[client_id] = {
+                    'coords': self.__local_coords_copy.get(client_id, []),
+                    'color': client_data.get('color', '#000000'),
+                    'icon': self.__map_icons.get(client_data.get('species', 'Troodon'))
+                }
+        
+            map = renderer.coordinates(map, data, bounds)
 
         self.__canvas.delete('all')
         self.__tk_image = ImageTk.PhotoImage(map)
