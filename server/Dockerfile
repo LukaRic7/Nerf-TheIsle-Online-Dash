@@ -12,4 +12,4 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 EXPOSE 56556
 
-CMD ["python", "-m", "server.main"]
+CMD ["python", "-m", "main"]
