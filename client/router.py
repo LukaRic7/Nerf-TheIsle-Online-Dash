@@ -49,7 +49,7 @@ class Router:
         try:
             # This will raise an exception if the server rejects the connection
             self.__sio.connect(f'http://{ip}:{port}', auth={ 'password': password },
-                               wait_timeout=60)
+                               retry=True)
         except socketio.exceptions.ConnectionError as e:
             lr.Log.error(f'Error connecting to server: {e}', align_key=43)
 
