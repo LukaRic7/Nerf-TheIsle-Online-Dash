@@ -62,6 +62,8 @@ def coordinates(image:Image.Image, data:dict[str, dict], bounds:dict) -> Image.I
             y, x = coord
             w, h = image.size
 
+            y *= -1
+
             px = (x - bounds['min-x']) / (bounds['max-x'] - bounds['min-x']) * w
             py = h - (y - bounds['min-y']) / (bounds['max-y'] - bounds['min-y']) * h
 
