@@ -37,9 +37,11 @@ class Gui(ttk.Frame):
         self.__food = tk.PhotoImage(file='assets/food.png')
         self.__water = tk.PhotoImage(file='assets/water.png')
         self.__growth = tk.PhotoImage(file='assets/growth.png')
-        self.__bones = tk.PhotoImage(file='assets/health.png').subsample(2)
-        self.__meat = tk.PhotoImage(file='assets/health.png').subsample(2)
-        self.__playtime = tk.PhotoImage(file='assets/health.png').subsample(2)
+        self.__bones = tk.PhotoImage(file='assets/bones.png').subsample(3)
+        self.__meat = tk.PhotoImage(file='assets/meat.png').subsample(3)
+        self.__playtime = tk.PhotoImage(file='assets/playtime.png').subsample(35)
+
+        self.__pending_formatted = {}
 
         self.__map_icons:dict[str, Image.Image] = {}
         species = ['Tyrannosaurus', 'Allosaurus', 'Deinosuchus', 'Ceratosaurus',
@@ -94,9 +96,8 @@ class Gui(ttk.Frame):
         self.render_map()
 
     def update_pending_teleports(self, pending_clients:list[dict]):
-        pending_formatted = {}
         for client in pending_clients:
-            pending_formatted[client.get('discord_id')] = client.get('request_id')
+            self.__pending_formatted[client.get('discord_id')] = client.get('request_id')
 
         if pending_clients:
             lr.Log.debug(f'There is {len(pending_clients)} tp requests pending.')
@@ -104,10 +105,10 @@ class Gui(ttk.Frame):
         pending_client_ids:dict[str, dict] = {}
         for client_id, data in self.__local_copy_clients_data.items():
             discord_id = data.get('discord_id', '')
-            if discord_id in list(pending_formatted.keys()):
+            if discord_id in list(self.__pending_formatted.keys()):
                 pending_client_ids[client_id] = {
                     'discord_id': discord_id,
-                    'request_id': pending_formatted.get(discord_id)
+                    'request_id': self.__pending_formatted.get(discord_id)
                 }
 
         for client_id, data in pending_client_ids.items():
@@ -136,10 +137,11 @@ class Gui(ttk.Frame):
         lr.Log.debug(f'Accepting teleport request from: {btn_owner_client_id}',
                      highlight=btn_owner_client_id)
 
-        client_data = self.__local_copy_clients_data.get(btn_owner_client_id, {})
+        client_data = self.__local_copy_clients_data.get(btn_owner_client_id)
         discord_id = client_data.get('discord_id')
+        request_id = self.__pending_formatted.get(discord_id)
         
-        response:dict = self.accept_tp_request_callback(discord_id)
+        response:dict = self.accept_tp_request_callback(request_id)
         message:str = response.get('message') or response.get('error')
         is_bad:bool = len(response.get('error', ''))
         if message:
@@ -282,7 +284,9 @@ class Gui(ttk.Frame):
                 widgets['playtime'].configure(text=data.get('playtime', '0h 0m'))
 
                 for key, row_widgets in widgets.get('row_widgets', {}).items():
-                    val = data.get('vitals', {}).get(key) or data.get('growth', 0)
+                    val = data.get('vitals', {}).get(key)
+                    if val == None:
+                        val = data.get('growth', 0)
                     row_widgets['progress'].configure(value=val * 100)
                     row_widgets['value'].configure(text=f'{val * 100:.2f}%')
 
