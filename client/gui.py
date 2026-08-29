@@ -54,11 +54,11 @@ class Gui(ttk.Frame):
             try:
                 file = f'assets/{specie}.png'
                 self.__map_icons[specie] = Image.open(file).convert('RGBA').resize(
-                    (64, 64), Image.Resampling.LANCZOS)
+                    (48, 48), Image.Resampling.LANCZOS)
             except:
                 file = 'assets/fraigl_star.png'
                 self.__map_icons[specie] = Image.open(file).convert('RGBA').resize(
-                    (64, 64), Image.Resampling.LANCZOS)
+                    (32, 32), Image.Resampling.LANCZOS)
 
         self.__client_frames:dict[str, dict[str, tk.Widget]] = {}
         self.__local_coords_copy:dict[str, list] = {}
