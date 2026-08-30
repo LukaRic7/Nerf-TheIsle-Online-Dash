@@ -1,4 +1,4 @@
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 def draw_grid(image:Image.Image, size:int=8) -> Image.Image:
     width, height = image.size
@@ -31,62 +31,113 @@ def draw_grid(image:Image.Image, size:int=8) -> Image.Image:
 
     return Image.alpha_composite(image, overlay)
 
-def letterbox_and_grid(image:Image.Image, width:int, height:int, grid_size:int=8) -> Image.Image:
+def resize_map(image: Image.Image, width: int, height: int) -> Image.Image:
     base_width, base_height = image.size
     scale_factor = min(width / base_width, height / base_height)
     new_size = (int(base_width * scale_factor), int(base_height * scale_factor))
     
     resized = image.resize(new_size, Image.Resampling.LANCZOS)
-    resized = resized.convert('RGBA')
+    return resized.convert('RGBA')
 
-    letterboxing_color = resized.getpixel((0, 0))
-
-    resized = draw_grid(resized, size=grid_size)
-
-    canvas = Image.new('RGBA', (width, height), letterboxing_color)
-
-    paste_x = (width - new_size[0]) // 2
-    paste_y = (height - new_size[1]) // 2
-
-    canvas.paste(resized, (paste_x, paste_y), resized)
-
+def add_letterbox(image: Image.Image, width: int, height: int, bg_color: tuple) -> Image.Image:
+    canvas = Image.new('RGBA', (width, height), bg_color)
+    
+    paste_x = (width - image.width) // 2
+    paste_y = (height - image.height) // 2
+    
+    canvas.paste(image, (paste_x, paste_y), image)
     return canvas
+
+def apply_heatmap(image:Image.Image, positions:list[dict], bounds:dict) -> Image.Image:
+    DOT_RADIUS = 2
+    BLUR_RADIUS = 7
+    THRESHOLD = 30
+    MAX_OPACITY = 0.8
+
+    if not positions:
+        return image.convert('RGBA')
+
+    w, h = image.size
+    
+    x_range = bounds['max-x'] - bounds['min-x']
+    y_range = bounds['max-y'] - bounds['min-y']
+
+    density = Image.new('L', (w, h), 0)
+    draw = ImageDraw.Draw(density)
+
+    for pos in positions:
+        x, y = pos.get('x'), pos.get('y')
+        if x is None or y is None: continue
+
+        px = int(((x - bounds['min-x']) / x_range) * w)
+        py = int(((y - bounds['min-y']) / y_range) * h)
+
+        draw.ellipse(
+            (px - DOT_RADIUS, py - DOT_RADIUS, px + DOT_RADIUS, py + DOT_RADIUS),
+            fill=255
+        )
+
+    density = density.filter(ImageFilter.GaussianBlur(radius=BLUR_RADIUS))
+
+    density = density.point(lambda p: 0 if p < THRESHOLD else int((p - THRESHOLD) * (255 / (255 - THRESHOLD))))
+
+    palette = []
+    for i in range(256):
+        if i < 64:
+            palette.extend([0, 0, int(i * 4)])                     
+        elif i < 128:
+            palette.extend([0, int((i - 64) * 4), 255 - int((i - 64) * 4)]) 
+        elif i < 192:
+            palette.extend([int((i - 128) * 4), 255, 0])           
+        else:
+            palette.extend([255, 255 - int((i - 192) * 4), 0])     
+
+    heatmap = density.copy()
+    heatmap.putpalette(palette)
+    heatmap = heatmap.convert('RGBA')
+
+    alpha = density.point(lambda p: int(p * MAX_OPACITY) if p > 0 else 0)
+    heatmap.putalpha(alpha)
+
+    return Image.alpha_composite(image.convert('RGBA'), heatmap)
 
 def coordinates(image:Image.Image, data:dict[str, dict], bounds:dict) -> Image.Image:
     overlay = Image.new('RGBA', image.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
+    
+    w, h = image.size
+    
+    x_range = bounds['max-x'] - bounds['min-x']
+    y_range = bounds['max-y'] - bounds['min-y']
 
     for client_id, client_data in data.items():
         coords = []
         for coord in client_data.get('coords', []):
-            y, x = coord
-            w, h = image.size
+            # Because your data is [Y, X]
+            y, x = coord 
 
-            y *= -1
-
-            px = (x - bounds['min-x']) / (bounds['max-x'] - bounds['min-x']) * w
-            py = h - (y - bounds['min-y']) / (bounds['max-y'] - bounds['min-y']) * h
+            px = ((x - bounds['min-x']) / x_range) * w
+            py = ((y - bounds['min-y']) / y_range) * h
 
             coords.append((px, py))
 
         color = client_data.get('color', '#000000')
+        
         if len(coords) > 1:
-            for i in range(len(coords) - 1):
-                draw.line((coords[i], coords[i + 1]), fill=color, width=2)
+            draw.line(coords, fill=color, width=2)
 
-        for i, (x, y) in enumerate(coords):
+        for i, (px, py) in enumerate(coords):
+            r = 3
+            draw.ellipse((px - r, py - r, px + r, py + r), 
+                         fill=color, outline='#ffffff', width=1)
+            
             if i == len(coords) - 1:
                 icon = client_data.get('icon')
 
                 if icon is not None:
-                    icon_x = int(x - icon.width / 2)
-                    icon_y = max(0, int(y - icon.height / 2) - 20)
+                    icon_x = int(px - icon.width / 2)
+                    icon_y = max(0, int(py - icon.height / 2) - 20)
 
                     overlay.alpha_composite(icon, (icon_x, icon_y))
-            
-            r = 3
-            draw.ellipse((x - r, y - r, x + r, y + r), fill=color,
-                            outline='#ffffff', width=1)
-
 
     return Image.alpha_composite(image, overlay)

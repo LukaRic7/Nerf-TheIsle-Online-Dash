@@ -62,9 +62,13 @@ class Gui(ttk.Frame):
 
         self.__client_frames:dict[str, dict[str, tk.Widget]] = {}
         self.__local_coords_copy:dict[str, list] = {}
+        self.__local_heatmap_copy:list[dict] = []
+
+        self.__skin_presets:dict = {}
 
         self.send_tp_request_callback = None
         self.accept_tp_request_callback = None
+        self.apply_skin_external_call = None
 
         map_config:dict = self.__config.get('map', {})
         self.__base_map_image = Image.open(map_config.get('filename'))
@@ -119,6 +123,13 @@ class Gui(ttk.Frame):
         self.__local_coords_copy = coords
         self.render_map()
 
+    def on_new_heatmap_coords(self, positions:list[dict]):
+        self.__local_heatmap_copy = positions
+        self.render_map()
+
+    def is_heatmap_toggled(self) -> bool:
+        return self.__heatmap_toggled_var.get()
+
     def __tp_btn_send(self, btn_owner_client_id:str):
         lr.Log.debug(f'Sending teleport request to: {btn_owner_client_id}',
                      highlight=btn_owner_client_id)
@@ -151,21 +162,23 @@ class Gui(ttk.Frame):
 
     def display_clients_information(self, clients_data:dict[str, dict]):
         self.__local_copy_clients_data = clients_data
+        
         for client_id, widgets in self.__client_frames.copy().items():
             if client_id in list(clients_data.keys()): continue
 
             widgets['background'].grid_remove()
             del self.__client_frames[client_id]
 
+        current_row = 0 
+
         for client_id, data in clients_data.items():
+            if not data.get('username'): continue
+
             if not self.__client_frames.get(client_id):
-                if not data.get('username'): continue
-
-                row = len(self.__client_frames)
-
-                background = tk.Frame(self.__sidebar_frame, highlightthickness=2,
+                background = tk.Frame(self.__player_frame, highlightthickness=2,
                                       highlightbackground='#909090')
-                background.grid(row=row, column=0, padx=10, pady=10, sticky='nsew')
+
+                background.grid(row=current_row, column=0, padx=10, pady=5, sticky='nsew')
                 background.grid_columnconfigure([1, 3], weight=1)
 
                 strainer = tk.Label(background, width=25)
@@ -179,8 +192,8 @@ class Gui(ttk.Frame):
                 lframe.grid(row=0, column=1, padx=2, pady=2, sticky='nsew')
                 lframe.grid_columnconfigure(1, weight=1)
 
-                username_str = (f'{data.get('username', 'LOADING...')}'
-                    + f' • lvl {data.get('level', '?')}')
+                username_str = (f"{data.get('username', 'LOADING...')}"
+                    + f" • lvl {data.get('level', '?')}")
                 username = ttk.Label(lframe, text=username_str, background='#F0F0F0',
                                      width=20, font=('Seoge UI', 9, 'bold'))
                 username.grid(row=0, column=0, padx=5, pady=(5, 0), sticky='nsew')
@@ -192,12 +205,12 @@ class Gui(ttk.Frame):
                                     compound='left', image=prime_icon)
                 species.grid(row=1, column=0, padx=5, pady=(0, 5), sticky='nsew')
 
-                bones = ttk.Label(lframe, text=f'{data.get('bones', 0):,}',
+                bones = ttk.Label(lframe, text=f"{data.get('bones', 0):,}",
                                   image=self.__bones, compound='left',
                                   font=('Seoge UI', 8), background='#F0F0F0')
                 bones.grid(row=2, column=0, padx=5, pady=(0, 1), sticky='nsew')
 
-                meat = ttk.Label(lframe, text=f'{data.get('meat', 0):,}',
+                meat = ttk.Label(lframe, text=f"{data.get('meat', 0):,}",
                                  image=self.__meat, compound='left',
                                   font=('Seoge UI', 8), background='#F0F0F0')
                 meat.grid(row=2, column=0, padx=(75, 5), pady=(0, 1), sticky='nsew')
@@ -251,13 +264,13 @@ class Gui(ttk.Frame):
                                                mode='determinate')
                     progress.grid(row=0, column=1, padx=2, pady=0, sticky='nsew')
 
-                    value = ttk.Label(row_frame, text=f'{value * 100:.1f}%', width=8,
+                    value_lbl = ttk.Label(row_frame, text=f'{value * 100:.1f}%', width=8,
                                       background='#F1F1F1')
-                    value.grid(row=0, column=2, padx=2, pady=0, sticky='nsew')
+                    value_lbl.grid(row=0, column=2, padx=2, pady=0, sticky='nsew')
 
                     row_widgets[key] = {
                         'frame': row_frame, 'icon': icon, 'progress': progress,
-                        'value': value
+                        'value': value_lbl
                     }
 
                 self.__client_frames[client_id] = {
@@ -269,9 +282,12 @@ class Gui(ttk.Frame):
                 }
             else:
                 widgets = self.__client_frames[client_id]
+                
+                widgets['background'].grid(row=current_row, column=0, padx=10, pady=5,
+                                           sticky='nsew')
 
-                username_str = (f'{data.get('username', 'LOADING...')}'
-                    + f' • lvl {data.get('level', '?')}')
+                username_str = (f"{data.get('username', 'LOADING...')}"
+                    + f" • lvl {data.get('level', '?')}")
                 widgets['username'].configure(text=username_str)
 
                 is_prime = data.get('is_prime', False)
@@ -279,8 +295,8 @@ class Gui(ttk.Frame):
                 widgets['species'].configure(text=data.get('species', 'LOADING...'),
                                              image=prime_icon)
 
-                widgets['bones'].configure(text=f'{data.get('bones', 0):,}')
-                widgets['meat'].configure(text=f'{data.get('meat', 0):,}')
+                widgets['bones'].configure(text=f"{data.get('bones', 0):,}")
+                widgets['meat'].configure(text=f"{data.get('meat', 0):,}")
                 widgets['playtime'].configure(text=data.get('playtime', '0h 0m'))
 
                 for key, row_widgets in widgets.get('row_widgets', {}).items():
@@ -289,6 +305,8 @@ class Gui(ttk.Frame):
                         val = data.get('growth', 0)
                     row_widgets['progress'].configure(value=val * 100)
                     row_widgets['value'].configure(text=f'{val * 100:.2f}%')
+            
+            current_row += 1
 
     def set_status(self, status:str, is_bad:bool=False):
         now = datetime.now()
@@ -301,10 +319,17 @@ class Gui(ttk.Frame):
         width = self.__canvas_frame.winfo_width()
         height = self.__canvas_frame.winfo_height()
 
-        map = renderer.letterbox_and_grid(self.__base_map_image, width, height)
+        map_img = renderer.resize_map(self.__base_map_image, width, height)
+        
+        bg_color = map_img.getpixel((0, 0))
+        
+        map_img = renderer.draw_grid(map_img, size=8)
 
         map_config:dict = self.__config.get('map', {})
         bounds = map_config.get('bounds', {})
+
+        if self.is_heatmap_toggled():
+            map_img = renderer.apply_heatmap(map_img, self.__local_heatmap_copy, bounds)
 
         if self.__local_copy_clients_data:
             data = {}
@@ -315,12 +340,47 @@ class Gui(ttk.Frame):
                     'icon': self.__map_icons.get(client_data.get('species', 'Troodon'))
                 }
         
-            map = renderer.coordinates(map, data, bounds)
+            map_img = renderer.coordinates(map_img, data, bounds)
+
+        final_map = renderer.add_letterbox(map_img, width, height, bg_color)
 
         self.__canvas.delete('all')
-        self.__tk_image = ImageTk.PhotoImage(map)
+        self.__tk_image = ImageTk.PhotoImage(final_map)
         self.__canvas_image_id = self.__canvas.create_image(0, 0, anchor='nw',
                                                             image=self.__tk_image)
+
+    def on_skin_list(self, skin_presets:dict):
+        self.__skin_presets = skin_presets
+
+        keys = list(self.__skin_presets.keys())
+        self.__skin_options.set_menu(keys[0], *list(self.__skin_presets.keys())[1:])
+
+    def __apply_skin_callback(self):
+        if self.apply_skin_external_call:
+            skin:dict = self.__skin_presets.get(self.__skin_options_var.get())
+
+            def hex_to_rgb(hex_color:str) -> dict[str, int]:
+                hex_color = hex_color.lstrip('#')
+
+                if len(hex_color) == 3:
+                    hex_color = ''.join(c * 2 for c in hex_color)
+
+                return {
+                    'r': int(hex_color[0:2], 16),
+                    'g': int(hex_color[2:4], 16),
+                    'b': int(hex_color[4:6], 16),
+                }
+
+            self.apply_skin_external_call({
+                'gender': 'm' if self.__male_radio_var.get() else 'f',
+                'skinVariation': int(skin.get('patternVariation', 0)),
+                'pattern': int(skin.get('pattern', 0)),
+                'glitchSkin': False,
+                'server': 'EU'
+            } | { k: hex_to_rgb(v) for k, v in skin.get('colors', {}).items()})
+
+    def __toggle_heatmap_calback(self):
+        self.render_map()
 
     def __add_widgets(self):
         self.grid_rowconfigure(0, weight=1)
@@ -336,9 +396,42 @@ class Gui(ttk.Frame):
         self.__canvas.grid(row=0, column=0, sticky='nsew')
         self.__canvas.bind('<Configure>', self.render_map)
 
-        self.__sidebar_frame = tk.Frame(self, background='#b1b1b1')
-        self.__sidebar_frame.grid(row=0, column=1, sticky='nsew')
-        self.__sidebar_frame.grid_columnconfigure(0, weight=1)
+        sidebar_frame = tk.Frame(self, background='#b1b1b1')
+        sidebar_frame.grid(row=0, column=1, sticky='nsew')
+        sidebar_frame.grid_rowconfigure(0, weight=1)
+        sidebar_frame.grid_columnconfigure(0, weight=1)
 
-        self.__status_bar = tk.Label(self, background='#c1c1c1')
+        self.__player_frame = tk.Frame(sidebar_frame, background='#b1b1b1')
+        self.__player_frame.grid(row=0, column=0, sticky='nsew')
+        self.__player_frame.grid_columnconfigure(0, weight=1)
+
+        options_frame = tk.Frame(sidebar_frame, background='#c1c1c1')
+        options_frame.grid(row=1, column=0, sticky='sew')
+
+        self.__heatmap_toggled_var = tk.BooleanVar(value=False)
+        toggle_heatmap = tk.Checkbutton(options_frame, text='Overlay Heatmap',
+            background='#c1c1c1', activebackground='#c1c1c1',
+            command=self.__toggle_heatmap_calback, variable=self.__heatmap_toggled_var)
+        toggle_heatmap.grid(row=0, column=0, padx=10, pady=3, sticky='nsew')
+
+        self.__skin_options_var = tk.StringVar()
+        self.__skin_options = ttk.OptionMenu(options_frame,
+                                             variable=self.__skin_options_var)
+        self.__skin_options.grid(row=0, column=1, padx=(5, 1), pady=3, sticky='nsew')
+
+        skin_apply = ttk.Button(options_frame, text='Apply Skin',
+                                command=self.__apply_skin_callback)
+        skin_apply.grid(row=0, column=2, padx=(1, 2), pady=3, sticky='nsew')
+
+        self.__male_radio_var = tk.BooleanVar(value=True)
+        male_radio = tk.Radiobutton(options_frame, text='M', value=1,
+            background='#c1c1c1', activebackground='#c1c1c1',
+            variable=self.__male_radio_var)
+        male_radio.grid(row=0, column=3, padx=2, pady=3, sticky='nsew')
+        female_radio = tk.Radiobutton(options_frame, text='F', value=0,
+            background='#c1c1c1', activebackground='#c1c1c1',
+            variable=self.__male_radio_var)
+        female_radio.grid(row=0, column=4, padx=(2, 5), pady=3, sticky='nsew')
+
+        self.__status_bar = tk.Label(self, background='#b1b1b1')
         self.__status_bar.grid(row=1, column=0, columnspan=2, sticky='nsew')

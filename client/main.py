@@ -95,7 +95,8 @@ def clipboard_checker():
         except Exception:
             clip = ''
         
-        if clip == last_clip: continue
+        if clip == last_clip: 
+            continue
         last_clip = clip
 
         try:
@@ -103,9 +104,16 @@ def clipboard_checker():
             
             parsed_coords = []
             for part in parts[:2]:
-                clean_part = part.replace('.', '')
-                clean_part = clean_part.replace(',', '.')
+                clean_part = part.strip()
                 
+                last_dot = clean_part.rfind('.')
+                last_comma = clean_part.rfind(',')
+                
+                if last_dot > last_comma:
+                    clean_part = clean_part.replace(',', '')
+                else:
+                    clean_part = clean_part.replace('.', '').replace(',', '.')
+                    
                 parsed_coords.append(float(clean_part))
 
             if len(parsed_coords) != 2: continue
@@ -116,9 +124,25 @@ def clipboard_checker():
                 router.send_coords(parsed_coords)
         except ValueError: pass
 
+def heatmap_worker():
+    positions = nerfAPI.get_heatmap_data()
+    gui.on_new_heatmap_coords(positions)
+
+    while True:
+        time.sleep(60)
+
+        if router.is_connected() and gui.is_heatmap_toggled():
+            positions = nerfAPI.get_heatmap_data()
+            gui.on_new_heatmap_coords(positions)
+
 def startup():
     validate_cookie()
     connect()
+
+    presets = nerfAPI.get_skin_presets()
+    gui.on_skin_list(presets)
+    gui.apply_skin_external_call = nerfAPI.set_skin
+    nerfAPI.external_gui_set_status = gui.set_status
 
     if router.is_connected():
         gui.my_client_id = router.client_id
@@ -152,6 +176,7 @@ def main():
 
     threading.Thread(target=startup, daemon=True).start()
     threading.Thread(target=clipboard_checker, daemon=True).start()
+    threading.Thread(target=heatmap_worker, daemon=True).start()
 
     gui.mainloop()
 
