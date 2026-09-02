@@ -73,6 +73,10 @@ class Gui(ttk.Frame):
         map_config:dict = self.__config.get('map', {})
         self.__base_map_image = Image.open(map_config.get('filename'))
 
+        self.__migration_overlay_image = Image.open(map_config.get('migration'))
+        self.__patrol_overlay_image = Image.open(map_config.get('patrol'))
+        self.__sanctuary_overlay_image = Image.open(map_config.get('sanctuary'))
+
         self.my_client_id = ''
         self.__local_copy_clients_data:dict[str, dict] = None
 
@@ -342,6 +346,13 @@ class Gui(ttk.Frame):
         
             map_img = renderer.coordinates(map_img, data, bounds)
 
+        if self.__migration_toggled_var.get():
+            map_img = renderer.apply_overlay(map_img, self.__migration_overlay_image)
+        if self.__patrol_toggled_var.get():
+            map_img = renderer.apply_overlay(map_img, self.__patrol_overlay_image)
+        if self.__sanctuary_toggled_var.get():
+            map_img = renderer.apply_overlay(map_img, self.__sanctuary_overlay_image)
+
         final_map = renderer.add_letterbox(map_img, width, height, bg_color)
 
         self.__canvas.delete('all')
@@ -353,7 +364,9 @@ class Gui(ttk.Frame):
         self.__skin_presets = skin_presets
 
         keys = list(self.__skin_presets.keys())
-        self.__skin_options.set_menu(keys[0], *list(self.__skin_presets.keys())[1:])
+        self.__skin_options['values'] = keys
+        if keys:
+            self.__skin_options.current(0)
 
     def __apply_skin_callback(self):
         if self.apply_skin_external_call:
@@ -380,6 +393,15 @@ class Gui(ttk.Frame):
             } | { k: hex_to_rgb(v) for k, v in skin.get('colors', {}).items()})
 
     def __toggle_heatmap_calback(self):
+        self.render_map()
+
+    def __toggle_migration_calback(self):
+        self.render_map()
+
+    def __toggle_patrol_calback(self):
+        self.render_map()
+
+    def __toggle_sanctuary_calback(self):
         self.render_map()
 
     def __add_widgets(self):
@@ -409,14 +431,14 @@ class Gui(ttk.Frame):
         options_frame.grid(row=1, column=0, sticky='sew')
 
         self.__heatmap_toggled_var = tk.BooleanVar(value=False)
-        toggle_heatmap = tk.Checkbutton(options_frame, text='Overlay Heatmap',
+        toggle_heatmap = tk.Checkbutton(options_frame, text='Heatmap',
             background='#c1c1c1', activebackground='#c1c1c1',
             command=self.__toggle_heatmap_calback, variable=self.__heatmap_toggled_var)
         toggle_heatmap.grid(row=0, column=0, padx=10, pady=3, sticky='nsew')
 
         self.__skin_options_var = tk.StringVar()
-        self.__skin_options = ttk.OptionMenu(options_frame,
-                                             variable=self.__skin_options_var)
+        self.__skin_options = ttk.Combobox(options_frame, state='readonly', width=15,
+                                           textvariable=self.__skin_options_var)
         self.__skin_options.grid(row=0, column=1, padx=(5, 1), pady=3, sticky='nsew')
 
         skin_apply = ttk.Button(options_frame, text='Apply Skin',
@@ -432,6 +454,27 @@ class Gui(ttk.Frame):
             background='#c1c1c1', activebackground='#c1c1c1',
             variable=self.__male_radio_var)
         female_radio.grid(row=0, column=4, padx=(2, 5), pady=3, sticky='nsew')
+
+        zone_frame = tk.Frame(options_frame, background='#c1c1c1')
+        zone_frame.grid(row=1, column=0, columnspan=5, padx=0, pady=0, sticky='nsew')
+
+        self.__migration_toggled_var = tk.BooleanVar(value=False)
+        toggle_migration = tk.Checkbutton(zone_frame, text='Migration',
+            background='#c1c1c1', activebackground='#c1c1c1',
+            command=self.__toggle_migration_calback, variable=self.__migration_toggled_var)
+        toggle_migration.grid(row=0, column=0, padx=10, pady=3, sticky='nsew')
+
+        self.__patrol_toggled_var = tk.BooleanVar(value=False)
+        toggle_patrol = tk.Checkbutton(zone_frame, text='Patrol',
+            background='#c1c1c1', activebackground='#c1c1c1',
+            command=self.__toggle_patrol_calback, variable=self.__patrol_toggled_var)
+        toggle_patrol.grid(row=0, column=1, padx=10, pady=3, sticky='nsew')
+
+        self.__sanctuary_toggled_var = tk.BooleanVar(value=False)
+        toggle_sanctuary = tk.Checkbutton(zone_frame, text='Sanctuary',
+            background='#c1c1c1', activebackground='#c1c1c1',
+            command=self.__toggle_sanctuary_calback, variable=self.__sanctuary_toggled_var)
+        toggle_sanctuary.grid(row=0, column=2, padx=10, pady=3, sticky='nsew')
 
         self.__status_bar = tk.Label(self, background='#b1b1b1')
         self.__status_bar.grid(row=1, column=0, columnspan=2, sticky='nsew')

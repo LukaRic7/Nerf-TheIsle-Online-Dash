@@ -31,6 +31,11 @@ def draw_grid(image:Image.Image, size:int=8) -> Image.Image:
 
     return Image.alpha_composite(image, overlay)
 
+def apply_overlay(image:Image.Image, overlay:Image.Image) -> Image.Image:
+    overlay_resized = overlay.resize(image.size)
+
+    return Image.alpha_composite(image, overlay_resized)
+
 def resize_map(image: Image.Image, width: int, height: int) -> Image.Image:
     base_width, base_height = image.size
     scale_factor = min(width / base_width, height / base_height)
@@ -49,6 +54,7 @@ def add_letterbox(image: Image.Image, width: int, height: int, bg_color: tuple) 
     return canvas
 
 def apply_heatmap(image:Image.Image, positions:list[dict], bounds:dict) -> Image.Image:
+    INTERNAL_RES = 350
     DOT_RADIUS = 2
     BLUR_RADIUS = 7
     THRESHOLD = 30
@@ -59,28 +65,36 @@ def apply_heatmap(image:Image.Image, positions:list[dict], bounds:dict) -> Image
 
     w, h = image.size
     
+    # Calculate internal dimensions while keeping the same aspect ratio
+    scale = INTERNAL_RES / max(w, h)
+    int_w = max(1, int(w * scale))
+    int_h = max(1, int(h * scale))
+    
     x_range = bounds['max-x'] - bounds['min-x']
     y_range = bounds['max-y'] - bounds['min-y']
 
-    density = Image.new('L', (w, h), 0)
+    # Draw dots on the FIXED size internal canvas
+    density = Image.new('L', (int_w, int_h), 0)
     draw = ImageDraw.Draw(density)
 
     for pos in positions:
         x, y = pos.get('x'), pos.get('y')
         if x is None or y is None: continue
 
-        px = int(((x - bounds['min-x']) / x_range) * w)
-        py = int(((y - bounds['min-y']) / y_range) * h)
+        # Map positions to the small internal canvas instead of full window
+        px = int(((x - bounds['min-x']) / x_range) * int_w)
+        py = int(((y - bounds['min-y']) / y_range) * int_h)
 
         draw.ellipse(
             (px - DOT_RADIUS, py - DOT_RADIUS, px + DOT_RADIUS, py + DOT_RADIUS),
             fill=255
         )
 
+    # Blur and threshold (always happens at the exact same density)
     density = density.filter(ImageFilter.GaussianBlur(radius=BLUR_RADIUS))
-
     density = density.point(lambda p: 0 if p < THRESHOLD else int((p - THRESHOLD) * (255 / (255 - THRESHOLD))))
 
+    # Apply colors
     palette = []
     for i in range(256):
         if i < 64:
@@ -98,6 +112,9 @@ def apply_heatmap(image:Image.Image, positions:list[dict], bounds:dict) -> Image
 
     alpha = density.point(lambda p: int(p * MAX_OPACITY) if p > 0 else 0)
     heatmap.putalpha(alpha)
+
+    # Smoothly upscale the finished heatmap to fit whatever the window size is
+    heatmap = heatmap.resize((w, h), Image.Resampling.LANCZOS)
 
     return Image.alpha_composite(image.convert('RGBA'), heatmap)
 

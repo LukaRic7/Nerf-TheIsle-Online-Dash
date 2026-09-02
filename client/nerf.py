@@ -35,9 +35,9 @@ class NerfAPI:
         try:
             data:dict = response.json()
 
-            msg = ' '.join([data.get('error', ''), data.get('message', '')])
+            msg = ' '.join([data.get('error', ''), data.get('message', '')]).strip()
             if msg and self.external_gui_set_status:
-                self.external_gui_set_status(msg, True)
+                self.external_gui_set_status(msg, data.get('error') != None)
         except requests.exceptions.JSONDecodeError:
             lr.Log.error('Failed to decode JSON. API returned non-JSON response!')
 
