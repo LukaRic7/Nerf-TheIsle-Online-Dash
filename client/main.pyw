@@ -128,12 +128,18 @@ def heatmap_worker():
     positions = nerfAPI.get_heatmap_data()
     gui.on_new_heatmap_coords(positions)
 
+    gui.update_friends(nerfAPI.get_friends())
+    gui.update_population(nerfAPI.get_population())
+
     while True:
         time.sleep(60)
 
         if router.is_connected() and gui.is_heatmap_toggled():
             positions = nerfAPI.get_heatmap_data()
             gui.on_new_heatmap_coords(positions)
+
+        gui.update_friends(nerfAPI.get_friends())
+        gui.update_population(nerfAPI.get_population())
 
 def startup():
     validate_cookie()
@@ -143,6 +149,7 @@ def startup():
     gui.on_skin_list(presets)
     gui.apply_skin_external_call = nerfAPI.set_skin
     nerfAPI.external_gui_set_status = gui.set_status
+    gui.parking_button_callback = nerfAPI.park_dino
 
     if router.is_connected():
         gui.my_client_id = router.client_id

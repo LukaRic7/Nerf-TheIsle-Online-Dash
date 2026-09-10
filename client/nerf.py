@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from pathlib import Path
 import loggerric as lr
 import requests, sys
@@ -117,3 +118,46 @@ class NerfAPI:
         lr.Log.debug(f'SEND TELEPORT: {response}')
 
         return response
+
+    def get_friends(self) -> dict:
+        response:dict[str, list[dict]] = self.__fetch('api/social/friends')
+
+        def format_time(time_str:str) -> str:
+            dt = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
+            diff = datetime.now(timezone.utc) - dt
+
+            days = diff.days
+            hours = diff.seconds // 3600
+            mins = (diff.seconds % 3600) // 60
+
+            parts = []
+            if days > 0:
+                parts.append(f"{days}d")
+            if hours > 0 or days > 0:
+                parts.append(f"{hours}h")
+            parts.append(f"{mins}m ago")
+
+            return " ".join(parts)
+
+        friends = {}
+        for friend in response.get('friends', []):
+            if friend.get('online', False):
+                status = friend.get('dinoDisplayName', 'Unknown Dino')
+            else:
+                status = format_time(friend.get('lastSeen', '1970-01-01T00:00:00.000Z'))
+
+            friends[friend.get('username')] = status
+
+        return friends
+
+    def park_dino(self):
+        self.__fetch('api/store-dino', 'post', { 'server': 'EU' })
+
+    def get_population(self) -> dict:
+        response:dict[str, list[dict]] = self.__fetch('api/population-control?server=eu')
+
+        population = {}
+        for species in response.get('populations'):
+            population[species.get('species', 'Unknown Dino')] = species.get('count', 0)
+
+        return population

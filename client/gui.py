@@ -1,10 +1,10 @@
 from PIL import Image, ImageTk
 from datetime import datetime
-import threading, time, sys
 from pathlib import Path
 from tkinter import ttk
 import loggerric as lr
 import tkinter as tk
+import sys, math, re
 
 # Check if the program is running interpreted or PyInstaller compiled
 if not getattr(sys, 'frozen', False):
@@ -69,6 +69,7 @@ class Gui(ttk.Frame):
         self.send_tp_request_callback = None
         self.accept_tp_request_callback = None
         self.apply_skin_external_call = None
+        self.parking_button_callback = None
 
         map_config:dict = self.__config.get('map', {})
         self.__base_map_image = Image.open(map_config.get('filename'))
@@ -82,6 +83,57 @@ class Gui(ttk.Frame):
 
         style = ttk.Style()
         style.theme_use('clam')
+
+        self.population = {}
+        self.friends = {}
+
+        menubar = tk.Menu(self.__root)
+        self.population_menu = tk.Menu(menubar, tearoff=0)
+        self.friends_menu = tk.Menu(menubar, tearoff=0)
+        self.heatmap_menu = tk.Menu(menubar, tearoff=0)
+        
+        menubar.add_cascade(label="Population", menu=self.population_menu)
+        menubar.add_cascade(label="Friends", menu=self.friends_menu)
+        menubar.add_cascade(label='Heatmap', menu=self.heatmap_menu)
+
+        self.heatmap_type_var = tk.StringVar(value='Inclusive Heat')
+
+        self.heatmap_menu.add_radiobutton(
+            label='All-Inclusive Dots',
+            variable=self.heatmap_type_var,
+            value='All-Inclusive Dots',
+            command=self.render_map
+        )
+
+        self.heatmap_menu.add_radiobutton(
+            label='Aggressive Heat',
+            variable=self.heatmap_type_var,
+            value='Aggressive Heat',
+            command=self.render_map
+        )
+
+        self.heatmap_menu.add_radiobutton(
+            label='Inclusive Heat',
+            variable=self.heatmap_type_var,
+            value='Inclusive Heat',
+            command=self.render_map
+        )
+
+        self.heatmap_menu.add_radiobutton(
+            label='Individual Heat',
+            variable=self.heatmap_type_var,
+            value='Individual Heat',
+            command=self.render_map
+        )
+
+        self.heatmap_menu.add_radiobutton(
+            label='Persistant Heat',
+            variable=self.heatmap_type_var,
+            value='Persistant Heat',
+            command=self.render_map
+        )
+        
+        self.__root.config(menu=menubar)
 
         self.__progressbar_colors = {
             'health': '#C0392B', 'stamina': '#F1C40F', 'food': '#D35400',
@@ -101,6 +153,11 @@ class Gui(ttk.Frame):
             ])
 
         self.__add_widgets()
+        self.render_map()
+
+    def _switch_heatmap_type(self, new_type:str):
+        self._heatmap_type = new_type
+
         self.render_map()
 
     def update_pending_teleports(self, pending_clients:list[dict]):
@@ -123,13 +180,21 @@ class Gui(ttk.Frame):
             if self.__client_frames[client_id]:
                 self.__client_frames[client_id]['accept_btn'].configure(state='active')
 
+    def __extract_own_coords(self) -> tuple | list:
+        try:
+            return self.__local_coords_copy.get(self.my_client_id or '?', [(0, 0)])[-1]
+        except IndexError:
+            return [(0, 0)]
+
     def update_map(self, coords:dict[str, list]):
         self.__local_coords_copy = coords
         self.render_map()
+        self.calc_nearby_players_count(self.__extract_own_coords())
 
     def on_new_heatmap_coords(self, positions:list[dict]):
         self.__local_heatmap_copy = positions
         self.render_map()
+        self.calc_nearby_players_count(self.__extract_own_coords())
 
     def is_heatmap_toggled(self) -> bool:
         return self.__heatmap_toggled_var.get()
@@ -163,6 +228,10 @@ class Gui(ttk.Frame):
             self.set_status(message, is_bad)
 
         self.__client_frames[btn_owner_client_id]['accept_btn'].configure(state='disabled')
+
+    def _attempt_park(self):
+        if self.parking_button_callback:
+            self.parking_button_callback()
 
     def display_clients_information(self, clients_data:dict[str, dict]):
         self.__local_copy_clients_data = clients_data
@@ -226,9 +295,9 @@ class Gui(ttk.Frame):
 
                 send_btn = None
                 accept_btn = None
+                btn_frame = tk.Frame(lframe)
+                btn_frame.grid(row=3, column=0, padx=(75, 5), pady=5, sticky='w')
                 if self.my_client_id != client_id:
-                    btn_frame = tk.Frame(lframe)
-                    btn_frame.grid(row=3, column=0, padx=(75, 5), pady=5, sticky='w')
                     btn_frame.grid_columnconfigure([0, 1], weight=1)
 
                     send_btn = tk.Button(btn_frame, text='STP', width=4,
@@ -239,6 +308,11 @@ class Gui(ttk.Frame):
                         state='disabled',
                         command=lambda cid=client_id: self.__tp_btn_accept(cid))
                     accept_btn.grid(row=0, column=1, padx=(2, 0), sticky='nsew')
+                else:
+                    btn_frame.grid_columnconfigure(0, weight=1)
+
+                    park_btn = tk.Button(btn_frame, text='PARK', width=10, command=self._attempt_park)
+                    park_btn.grid(row=0, column=0, columnspan=2, padx=(2, 2), sticky='nsew')
 
                 seperator = ttk.Separator(background, orient='vertical')
                 seperator.grid(row=0, column=2, padx=2, pady=10, sticky='nsew')
@@ -333,7 +407,7 @@ class Gui(ttk.Frame):
         bounds = map_config.get('bounds', {})
 
         if self.is_heatmap_toggled():
-            map_img = renderer.apply_heatmap(map_img, self.__local_heatmap_copy, bounds)
+            map_img = renderer.apply_heatmap(map_img, self.__local_heatmap_copy, bounds, self.heatmap_type_var.get())
 
         if self.__local_copy_clients_data:
             data = {}
@@ -367,6 +441,189 @@ class Gui(ttk.Frame):
         self.__skin_options['values'] = keys
         if keys:
             self.__skin_options.current(0)
+
+    def calc_nearby_players_count(self, target: dict | list | tuple | str, radius: float = 100_000.0):
+        """
+        Returns the number of player positions from the heatmap within `radius` units
+        of the target position or client ID.
+        """
+
+        def parse_coords(pos):
+            if isinstance(pos, dict):
+                x = pos.get("x", 0.0)
+                y = pos.get("y", pos.get("z", 0.0))
+                return x, y
+            elif isinstance(pos, (list, tuple)) and len(pos) >= 2:
+                return pos[0], pos[1]
+            return None
+
+        if isinstance(target, str):
+            target_coords = self.__local_coords_copy.get(target, [])
+            target_pos = parse_coords(target_coords)
+        else:
+            target_pos = parse_coords(target)
+
+        if target_pos is None:
+            return 0
+
+        tx, ty = target_pos
+        nearby_count = 0
+
+        for pos in self.__local_heatmap_copy:
+            p_coords = parse_coords(pos)
+            if p_coords is None:
+                continue
+
+            px, py = p_coords
+            distance = math.hypot(px - tx, py - ty)
+
+            if distance <= radius:
+                nearby_count += 1
+
+        lr.Log.debug(f'Nearby Players at: {target} (non-scaled): {nearby_count:,}')
+        self.__nearby_var.set(f'Nearby Players: ~{math.ceil(nearby_count / 30)}')
+
+    def update_population(self, population: dict):
+        self.population = population.copy()
+
+        self.species_limits = {
+            'Tyrannosaurus': 15, 'Allosaurus': 25, 'Deinosuchus': 25,
+            'Ceratosaurus': 38, 'Carnotaurus': 38, 'Dilophosaurus': 45,
+            'Omniraptor': 40, 'Austroraptor': 45, 'Herrerasaurus': 45,
+            'Troodon': 50, 'Pteranodon': 65,
+            'Stegosaurus': 40, 'Triceratops': 30, 'Diabloceratops': 44,
+            'Maiasaura': 38, 'Tenontosaurus': 45, 'Pachycephalosaurus': 50,
+            'Dryosaurus': 70, 'Hypsilophodon': 70, 'Kentrosaurus': 50,
+            'Beipiaosaurus': 70, 'Gallimimus': 55, 'Oviraptor': 60
+        }
+
+        self.population_menu.delete(0, "end")
+
+        diets = {
+            'Carnivore': ['Tyrannosaurus', 'Allosaurus', 'Deinosuchus', 'Ceratosaurus',
+                          'Carnotaurus', 'Dilophosaurus', 'Omniraptor', 'Austroraptor',
+                          'Herrerasaurus', 'Troodon', 'Pteranodon'],
+            'Herbivore': ['Stegosaurus', 'Triceratops', 'Diabloceratops', 'Maiasaura', 
+                          'Tenontosaurus', 'Pachycephalosaurus', 'Dryosaurus', 
+                          'Hypsilophodon', 'Kentrosaurus'],
+            'Omnivore': ['Beipiaosaurus', 'Gallimimus', 'Oviraptor']
+        }
+
+        categorized = {'Carnivore': [], 'Herbivore': [], 'Omnivore': [], 'Unknown': []}
+        for dino, count in population.items():
+            placed = False
+            for diet_name, species_list in diets.items():
+                if dino in species_list:
+                    categorized[diet_name].append((dino, count))
+                    placed = True
+                    break
+            
+            if not placed:
+                categorized['Unknown'].append((dino, count))
+
+        first_section = True
+        for diet_name in ['Carnivore', 'Herbivore', 'Omnivore', 'Unknown']:
+            items = categorized[diet_name]
+            if not items:
+                continue
+            
+            if not first_section:
+                self.population_menu.add_separator()
+            first_section = False
+
+            items.sort(key=lambda x: x[1], reverse=True)
+
+            for dino, count in items:
+                limit = self.species_limits.get(dino, '?')
+                
+                is_over_limit = isinstance(limit, int) and count >= limit
+                label_text = f"{dino} - {count}/{limit}"
+
+                if is_over_limit:
+                    self.population_menu.add_command(label=label_text, font=("TkMenuFont", 10, "bold"))
+                else:
+                    self.population_menu.add_command(label=label_text)
+
+    def _update_menu(self, old: dict, new: dict, menu):
+        for key, value in new.items():
+            if key not in old or old[key] != value:
+                
+                limit = getattr(self, 'species_limits', {}).get(key, '?')
+                is_over_limit = isinstance(limit, int) and value >= limit
+                label_text = f"{key} - {value}/{limit}"
+                font_setting = ("TkMenuFont", 10, "bold") if is_over_limit else ("TkMenuFont", 10, "normal")
+
+                if key not in old:
+                    menu.add_command(label=label_text, font=font_setting)
+                else:
+                    index = self._find_menu_entry(menu, key)
+                    if index is not None:
+                        menu.entryconfig(index, label=label_text, font=font_setting)
+
+        for key in old:
+            if key not in new:
+                index = self._find_menu_entry(menu, key)
+                if index is not None:
+                    menu.delete(index)
+
+    def _find_menu_entry(self, menu, key):
+        end_idx = menu.index("end")
+        if end_idx is None:
+            return None
+
+        for i in range(end_idx + 1):
+            if menu.type(i) == "command":
+                label = menu.entrycget(i, "label")
+                if label.startswith(f"{key} - "):
+                    return i
+
+        return None
+
+
+    def update_friends(self, friends: dict):
+        self.friends = friends.copy()
+
+        self.friends_menu.delete(0, "end")
+
+        online = []
+        offline = []
+
+        def parse_time_to_seconds(time_str: str) -> int:
+            """Converts strings like '15m', '2h', or '1h 30m' into total seconds for sorting."""
+            total_seconds = 0
+            matches = re.findall(r'(\d+)\s*([smhd])', time_str.lower())
+            
+            if matches:
+                for val, unit in matches:
+                    val = int(val)
+                    if unit == 's': total_seconds += val
+                    elif unit == 'm': total_seconds += val * 60
+                    elif unit == 'h': total_seconds += val * 3600
+                    elif unit == 'd': total_seconds += val * 86400
+                return total_seconds
+            
+            return float('inf')
+
+        for name, status in friends.items():
+            status_str = str(status)
+            
+            if any(char.isdigit() for char in status_str):
+                offline.append((name, status_str))
+            else:
+                online.append((name, status_str))
+
+        offline.sort(key=lambda x: parse_time_to_seconds(x[1]))
+
+        online.sort(key=lambda x: x[0].lower())
+
+        for name, status in online:
+            self.friends_menu.add_command(label=f"{name} - {status}")
+
+        if online and offline:
+            self.friends_menu.add_separator()
+
+        for name, status in offline:
+            self.friends_menu.add_command(label=f"{name} - {status}")
 
     def __apply_skin_callback(self):
         if self.apply_skin_external_call:
@@ -475,6 +732,9 @@ class Gui(ttk.Frame):
             background='#c1c1c1', activebackground='#c1c1c1',
             command=self.__toggle_sanctuary_calback, variable=self.__sanctuary_toggled_var)
         toggle_sanctuary.grid(row=0, column=2, padx=10, pady=3, sticky='nsew')
+
+        self.__nearby_var = tk.StringVar(value='Nearby Players: ?')
+        tk.Label(zone_frame, textvariable=self.__nearby_var, background='#c1c1c1').grid(row=0, column=3, padx=(20, 5), pady=3, sticky='nsew')
 
         self.__status_bar = tk.Label(self, background='#b1b1b1')
         self.__status_bar.grid(row=1, column=0, columnspan=2, sticky='nsew')
