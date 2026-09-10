@@ -40,7 +40,7 @@ from gui import Gui
 #  CONSTANTS & GLOBALS
 # ============================================= #
 
-VERSION = '1.5'
+VERSION = '1.6'
 
 router = Router()
 nerfAPI = NerfAPI(config.get('nerf-cookie'))
