@@ -521,6 +521,17 @@ class Gui(ttk.Frame):
             if not placed:
                 categorized['Unknown'].append((dino, count))
 
+        self.population_menu.add_command(
+            label=f"Total Population - {sum(population.values())}")
+        for diet_name, label in (
+            ('Carnivore', 'Carnivores'),
+            ('Herbivore', 'Herbivores'),
+            ('Omnivore', 'Omnivores')
+        ):
+            total = sum(count for _, count in categorized[diet_name])
+            self.population_menu.add_command(label=f"{label} - {total}")
+        self.population_menu.add_separator()
+
         first_section = True
         for diet_name in ['Carnivore', 'Herbivore', 'Omnivore', 'Unknown']:
             items = categorized[diet_name]
@@ -640,6 +651,8 @@ class Gui(ttk.Frame):
                     'g': int(hex_color[2:4], 16),
                     'b': int(hex_color[4:6], 16),
                 }
+
+            #lr.Log.pretty_print({ k: hex_to_rgb(v) for k, v in skin.get('colors', {}).items()})
 
             self.apply_skin_external_call({
                 'gender': 'm' if self.__male_radio_var.get() else 'f',

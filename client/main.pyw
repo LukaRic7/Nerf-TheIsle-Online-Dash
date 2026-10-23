@@ -168,6 +168,14 @@ def startup():
 
             time.sleep(5)
 
+def location_checker():
+    while True:
+        location = nerfAPI.get_location_spoof()
+        parsed = [location.get('y'), location.get('x')]
+        router.send_coords(parsed)
+        
+        time.sleep(30)
+
 # ============================================= #
 #  MAIN
 # ============================================= #
@@ -183,6 +191,7 @@ def main():
 
     threading.Thread(target=startup, daemon=True).start()
     threading.Thread(target=clipboard_checker, daemon=True).start()
+    threading.Thread(target=location_checker, daemon=True).start()
     threading.Thread(target=heatmap_worker, daemon=True).start()
 
     gui.mainloop()

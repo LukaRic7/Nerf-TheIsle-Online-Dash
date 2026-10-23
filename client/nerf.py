@@ -20,13 +20,17 @@ class NerfAPI:
 
     def __fetch(self, path:str, method:str='get', payload:dict=None) -> dict:
         url = f'https://api.nerfofficial.org/{path}'
-        headers = { 'Cookie': self.__cookie }
+        headers = { 'Cookie': self.__cookie, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36' }
 
         response:requests.Response = None
         if method == 'get':
             response = requests.get(url, headers=headers)
         elif method == 'post':
             response = requests.post(url, headers=headers, json=payload)
+
+        #lr.Log.debug(url)
+        #lr.Log.debug(f'Response: [{response.status_code}] {response.reason}')
+        #lr.Log.pretty_print(response.json())
 
         if not response.ok:
             lr.Log.error(f'Fetch not OK: [{response.status_code}] {response.reason}',
@@ -72,6 +76,8 @@ class NerfAPI:
         return data.get('normal', {})
 
     def set_skin(self, payload:dict):
+        #lr.Log.pretty_print(payload)
+
         self.__fetch('api/apply-skin', 'post', payload)
 
     def get_active_dino(self) -> dict:
@@ -149,6 +155,15 @@ class NerfAPI:
             friends[friend.get('username')] = status
 
         return friends
+
+    def get_location_spoof(self) -> dict:
+        response:dict = self.__fetch('api/debug/db-structure')
+        
+        user_data:dict = response.get('userData', {})
+        in_users:dict = user_data.get('inUsers', {})
+        last_known_location:dict = in_users.get('lastKnownLocation', {})
+
+        return last_known_location
 
     def park_dino(self):
         self.__fetch('api/store-dino', 'post', { 'server': 'EU' })
